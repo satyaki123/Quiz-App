@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive Quiz – Timer + Leaderboard</title>
+  <style>
+    :root{
+      --bg:#0b0d12; --card:#121521; --muted:#9aa3b2; --text:#ecf0ff; --border:#22263a;
+      --accent1:#7c8aff; --accent2:#a855f7; --accent3:#22d3ee; --bad:#ef4444; --good:#10b981;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--text)}
+    .container{max-width:960px; margin-inline:auto; padding:0 20px}
+    .grid-bg{position:fixed; inset:0; pointer-events:none; opacity:.25; background:
+      linear-gradient(transparent 0,transparent 49%,rgba(124,138,255,.08) 50%,transparent 51%,transparent 100%),
+      linear-gradient(90deg,transparent 0,transparent 49%,rgba(124,138,255,.08) 50%,transparent 51%,transparent 100%);
+      background-size:28px 28px}
+    .card{background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .btn{display:inline-flex; align-items:center; gap:.5rem; border-radius:999px; padding:.8rem 1.2rem; border:1px solid var(--border); background:#182033; color:var(--text); cursor:pointer}
+    .btn.primary{background:linear-gradient(90deg,var(--accent1),var(--accent2),var(--accent3)); border:none}
+    .btn.ghost{background:transparent}
+    .btn.small{padding:.5rem .8rem; font-size:.9rem}
+    .pill{background:#162036; border:1px solid var(--border); color:#dbe2ff; padding:.35rem .6rem; border-radius:999px}
+    .muted{color:var(--muted)}
+    .small{font-size:.9rem}
+    .row{display:flex; align-items:center}
+    .row.spread{justify-content:space-between}
+    .row.gap{gap:10px}
+    .end{justify-content:flex-end}
+    .mt{margin-top:12px}
+    .hidden{display:none}
+    .header{display:flex; align-items:center; justify-content:space-between; padding:14px 0}
+    .brand{font-weight:700; letter-spacing:.2px}
+    .footer{padding:32px 0; text-align:center}
+
+    .start{padding:22px; margin-top:18px}
+    .start h1{margin:.2rem 0 0}
+    .setup{display:grid; gap:12px; max-width:540px; margin-top:14px}
+    .field{display:grid; gap:6px}
+    .field input,.field select{height:44px; border:1px solid var(--border); border-radius:10px; background:#0e1527; color:var(--text); padding:0 12px}
+
+    .quiz{padding:18px; margin-top:18px}
+    .topbar{display:grid; grid-template-columns:1fr auto auto auto; gap:12px; align-items:center}
+    .topbar .progress{grid-column:1 / -1; background:#0c1326; height:10px; border-radius:999px; overflow:hidden; border:1px solid var(--border)}
+    #progressBar{height:100%; width:0%; background:linear-gradient(90deg,var(--accent1),var(--accent2)); transition:width .25s ease}
+    .timer{position:relative; display:flex; align-items:center; gap:6px}
+    .clock{width:40px; height:40px}
+    .clock .bg{fill:none; stroke:#2a3357; stroke-width:4}
+    .clock .fg{fill:none; stroke:var(--accent3); stroke-width:4; stroke-linecap:round; stroke-dasharray:100 100; stroke-dashoffset:0; transition:stroke-dashoffset 1s linear}
+    #timeText{min-width:2ch; text-align:right}
+    .score{justify-self:end}
+    .qwrap{margin-top:12px}
+    #qTitle{margin:6px 0 10px}
+    .choices{list-style:none; padding:0; margin:0; display:grid; gap:10px}
+    .choices li{border:1px solid var(--border); background:#0e1426; border-radius:12px; padding:12px; cursor:pointer; transition:transform .05s ease, background .2s}
+    .choices li:hover{transform:translateY(-1px); background:#0f1730}
+    .choices li.correct{background:rgba(16,185,129,.15); border-color:rgba(16,185,129,.45)}
+    .choices li.wrong{background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.45)}
+
+    .result{padding:22px; margin-top:18px}
+    .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0 6px}
+    .stat{background:#0e1426; border:1px solid var(--border); border-radius:12px; padding:12px; text-align:center}
+    .stat .label{color:var(--muted); font-size:.9rem}
+    .stat .value{font-size:1.6rem; font-weight:700}
+    .save{display:grid; gap:10px; max-width:440px}
+    .save input{height:44px; border:1px solid var(--border); border-radius:10px; background:#0e1527; color:var(--text); padding:0 12px}
+
+    .modal{border:none; padding:0; background:transparent}
+    .modal::backdrop{background:rgba(0,0,0,.5)}
+    .modal .modal-inner{padding:16px; max-width:720px; width:92vw}
+    .board{width:100%; border-collapse:collapse; margin-top:8px}
+    .board th,.board td{border-bottom:1px solid var(--border); padding:8px 6px; text-align:left}
+    .board th{color:#c9d0ff}
+
+    @media(max-width:640px){
+      .topbar{grid-template-columns:1fr 1fr 1fr; grid-auto-rows:min-content}
+      .score{grid-column:3}
+      .timer{grid-column:1}
+      .stats{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-bg" aria-hidden></div>
+
+  <header class="container header">
+    <div class="brand">⚡ QuizMaster</div>
+    <nav class="nav row gap">
+      <label class="row gap small muted" title="Toggle sound">
+        <input type="checkbox" id="soundToggle" checked>
+        Sound
+      </label>
+      <button id="viewBoardBtn" class="btn ghost" type="button">🏆 Leaderboard</button>
+      <button id="resetBoardBtn" class="btn ghost small" type="button" title="Clear saved scores">↺ Reset Board</button>
+    </nav>
+  </header>
+
+  <main id="startScreen" class="container card start">
+    <h1>Interactive Quiz</h1>
+    <p class="muted">Timer countdown • Difficulty levels • Score tracking • LocalStorage leaderboard</p>
+
+    <form id="setupForm" class="setup">
+      <label class="field">
+        <span>Player name</span>
+        <input id="playerName" type="text" placeholder="Enter your name" maxlength="20" />
+      </label>
+
+      <label class="field">
+        <span>Difficulty</span>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+
+      <label class="row gap">
+        <input type="checkbox" id="shuffle" checked />
+        <span>Shuffle questions</span>
+      </label>
+
+      <div class="row gap">
+        <button class="btn primary" type="submit">Start Quiz →</button>
+        <button class="btn" type="button" id="howBtn">How it works</button>
+      </div>
+    </form>
+
+    <details class="mt">
+      <summary>Keyboard Shortcuts</summary>
+      <ul class="muted">
+        <li>1–4: select an option</li>
+        <li>N: next question</li>
+        <li>R: restart after results</li>
+      </ul>
+    </details>
+  </main>
+
+  <section id="quizScreen" class="container card quiz hidden" aria-live="polite">
+    <div class="topbar">
+      <div class="pill" id="diffBadge">Medium</div>
+      <div class="timer">
+        <svg viewBox="0 0 36 36" class="clock"><path class="bg" d="M18 2 a 16 16 0 1 0 0.00001 0"/><path id="clockPath" class="fg" d="M18 2 a 16 16 0 1 0 0.00001 0"/></svg>
+        <span id="timeText">20</span>
+      </div>
+      <div class="score">Score: <b id="scoreText">0</b></div>
+      <button id="quitBtn" class="btn ghost small" type="button">Quit</button>
+      <div class="progress"><div id="progressBar"></div></div>
+    </div>
+
+    <div class="qwrap">
+      <h2 id="qTitle">Question title</h2>
+      <ol id="choices" class="choices"></ol>
+    </div>
+
+    <div class="row gap end">
+      <button id="nextBtn" class="btn" type="button" disabled>Next ⇨</button>
+    </div>
+  </section>
+
+  <section id="resultScreen" class="container card result hidden">
+    <h2>Results</h2>
+    <p class="muted" id="resultMeta"></p>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Score</div><div class="value" id="finalScore">0</div></div>
+      <div class="stat"><div class="label">Correct</div><div class="value" id="finalCorrect">0</div></div>
+      <div class="stat"><div class="label">Time Left</div><div class="value" id="finalTime">0s</div></div>
+    </div>
+
+    <form id="saveForm" class="save">
+      <label class="field">
+        <span>Save as</span>
+        <input id="saveName" type="text" maxlength="20" />
+      </label>
+      <div class="row gap">
+        <button class="btn primary" type="submit">Save to Leaderboard</button>
+        <button class="btn" id="shareBtn" type="button">Download Share Card</button>
+      </div>
+    </form>
+
+    <div class="row gap mt">
+      <button class="btn" id="playAgainBtn" type="button">Play Again</button>
+      <button class="btn ghost" id="viewBoardBtn2" type="button">View Leaderboard</button>
+    </div>
+
+    <canvas id="shareCanvas" width="1024" height="512" class="hidden"></canvas>
+  </section>
+
+  <dialog id="boardModal" class="modal">
+    <div class="modal-inner card">
+      <div class="row spread">
+        <h3>🏆 Leaderboard</h3>
+        <button class="btn ghost small" id="closeBoard" type="button">✕ Close</button>
+      </div>
+      <p class="muted small">Top 10 scores are stored in your browser's LocalStorage.</p>
+      <table class="board">
+        <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Diff</th><th>Date</th></tr></thead>
+        <tbody id="boardBody"></tbody>
+      </table>
+    </div>
+  </dialog>
+
+  <dialog id="howModal" class="modal">
+    <div class="modal-inner card">
+      <div class="row spread">
+        <h3>ℹ️ How it works</h3>
+        <button class="btn ghost small" id="closeHow" type="button">✕ Close</button>
+      </div>
+      <ul class="muted">
+        <li>Pick a difficulty. Each question has its own countdown.</li>
+        <li>Answer before time ends for points. Wrong answers give 0.</li>
+        <li>Top 10 scores are saved locally on your device.</li>
+      </ul>
+    </div>
+  </dialog>
+
+  <footer class="container footer">
+    <small class="muted">Built with HTML • CSS • JavaScript — Timer, Difficulty, Score, LocalStorage Leaderboard • + Sounds & Share Card</small>
+  </footer>
+
+  <script>
+    /* Fixed: removed duplicate declarations that stopped script execution */
+
+    const QUESTION_BANK = {
+      easy: [
+        { q: "What does HTML stand for?", choices: ["HyperText Markup Language","HighText Machine Language","Hyperlinks and Text Markup Language","Home Tool Markup Language"], answerIndex: 0 },
+        { q: "Which CSS property controls the text size?", choices: ["font-weight","text-size","font-size","text-style"], answerIndex: 2 },
+        { q: "Inside which HTML element do we put JavaScript?", choices: ["<javascript>","<js>","<script>","<scripting>"], answerIndex: 2 },
+        { q: "Which attribute provides alternate text for images?", choices: ["title","src","alt","longdesc"], answerIndex: 2 },
+        { q: "Which tag defines an internal style sheet?", choices: ["<style>","<css>","<script>","<link>"], answerIndex: 0 },
+        { q: "Which tag creates a numbered list?", choices: ["<ul>","<ol>","<dl>","<li>"], answerIndex: 1 },
+        { q: "Which CSS property changes text color?", choices: ["text-color","font-color","color","foreground"], answerIndex: 2 },
+        { q: "Which input type is used for email?", choices: ["text","mail","email","letters"], answerIndex: 2 },
+      ],
+      medium: [
+        { q: "Which array method creates a new array with elements that pass a test?", choices: ["map()","filter()","reduce()","forEach()"], answerIndex: 1 },
+        { q: "What is the output of typeof NaN?", choices: ["'number'","'NaN'","'undefined'","'object'"], answerIndex: 0 },
+        { q: "Which CSS layout is best for two-dimensional layouts?", choices: ["Flexbox","Grid","Float","Position"], answerIndex: 1 },
+        { q: "Which HTTP status code means 'Created'?", choices: ["200","201","202","204"], answerIndex: 1 },
+        { q: "What does '===' check in JavaScript?", choices: ["Value only","Reference only","Value and type","Type only"], answerIndex: 2 },
+        { q: "Which method converts JSON string to object?", choices: ["JSON.parse","JSON.stringify","Object.assign","toJSON"], answerIndex: 0 },
+        { q: "Which event fires when the DOM is fully loaded?", choices: ["window.load","DOMContentLoaded","ready","document.load"], answerIndex: 1 },
+        { q: "Which header enables CORS on the server?", choices: ["Content-Type","Access-Control-Allow-Origin","Authorization","Cache-Control"], answerIndex: 1 },
+      ],
+      hard: [
+        { q: "Which of the following is NOT a valid HTTP method?", choices: ["PATCH","PURGE","OPTIONS","TRACE"], answerIndex: 1 },
+        { q: "In CSS, what does contain: content; primarily do?", choices: ["Creates a new containing block to improve rendering performance","Prevents content from overflowing","Creates stacking context","Applies content-visibility to children"], answerIndex: 0 },
+        { q: "Which JS feature allows asynchronous, non-blocking I/O?", choices: ["Event loop","Generators","Hoisting","Prototypal inheritance"], answerIndex: 0 },
+        { q: "Which is true about Service Workers?", choices: ["They run on the main UI thread","They can intercept network requests and cache responses","They require no HTTPS","They have direct DOM access"], answerIndex: 1 },
+        { q: "Average time complexity of binary search?", choices: ["O(n)","O(log n)","O(n log n)","O(1)"], answerIndex: 1 },
+        { q: "Which header helps prevent XSS by controlling resource origins?", choices: ["X-Frame-Options","Referrer-Policy","Content-Security-Policy","Strict-Transport-Security"], answerIndex: 2 },
+        { q: "Which CSS function clamps a value between a min and max?", choices: ["bound()","minmax()","clamp()","limit()"], answerIndex: 2 },
+        { q: "What does 'defer' do on a script tag?", choices: ["Executes immediately","Blocks HTML parsing","Executes after HTML parsed, before DOMContentLoaded","Loads as module"], answerIndex: 2 },
+      ],
+    };
+
+    const DIFF_CONFIG = {
+      easy: { label: "Easy", perQuestionTime: 25, points: 10 },
+      medium:{ label: "Medium", perQuestionTime: 20, points: 20 },
+      hard:  { label: "Hard",  perQuestionTime: 15, points: 30 },
+    };
+
+    const MAX_QUESTIONS = 10;
+    const BOARD_KEY = "quizHighScores_v1";
+    const BOARD_LIMIT = 10;
+
+    let state = {
+      name: "",
+      difficulty: "medium",
+      questions: [],
+      index: 0,
+      score: 0,
+      correct: 0,
+      timeLeft: 0,
+      timerId: null,
+      accepting: true,
+      audioCtx: null,
+      soundOn: true,
+    };
+
+    const $  = (s, root=document) => root.querySelector(s);
+    const $$ = (s, root=document) => Array.from(root.querySelectorAll(s));
+
+    const startScreen   = $("#startScreen");
+    const quizScreen    = $("#quizScreen");
+    const resultScreen  = $("#resultScreen");
+    const setupForm     = $("#setupForm");
+    const playerNameIn  = $("#playerName");
+    const difficultySel = $("#difficulty");
+    const shuffleChk    = $("#shuffle");
+    const diffBadge     = $("#diffBadge");
+    const timeText      = $("#timeText");
+    const clockPath     = $("#clockPath");
+    const scoreText     = $("#scoreText");
+    const progressBar   = $("#progressBar");
+    const qTitle        = $("#qTitle");
+    const choices       = $("#choices");
+    const nextBtn       = $("#nextBtn");
+    const quitBtn       = $("#quitBtn");
+
+    const finalScore    = $("#finalScore");
+    const finalCorrect  = $("#finalCorrect");
+    const finalTime     = $("#finalTime");
+    const resultMeta    = $("#resultMeta");
+    const saveForm      = $("#saveForm");
+    const saveName      = $("#saveName");
+    const playAgainBtn  = $("#playAgainBtn");
+
+    const boardModal    = $("#boardModal");
+    const boardBody     = $("#boardBody");
+    const closeBoard    = $("#closeBoard");
+    const viewBoardBtn  = $("#viewBoardBtn");
+    const viewBoardBtn2 = $("#viewBoardBtn2");
+    const resetBoardBtn = $("#resetBoardBtn");
+
+    const howModal      = $("#howModal");
+    const howBtn        = $("#howBtn");
+    const closeHow      = $("#closeHow");
+
+    const soundToggle   = $("#soundToggle");
+
+    const shareBtn      = $("#shareBtn");
+    const shareCanvas   = $("#shareCanvas");
+
+    function shuffle(arr){return arr.map(v=>[Math.random(), v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);}
+    function show(el){ el.classList.remove("hidden"); }
+    function hide(el){ el.classList.add("hidden"); }
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+    function setProgress(current, total){ const pct = total? Math.round((current/total)*100) : 0; progressBar.style.width = pct + "%"; }
+    function circleDash(total, left){ const pct = clamp(left/total,0,1); clockPath.style.strokeDashoffset = (100 - 100*pct).toFixed(2); }
+
+    function getBoard(){ try{ return JSON.parse(localStorage.getItem(BOARD_KEY)||"[]") }catch{ return [] } }
+    function setBoard(data){ localStorage.setItem(BOARD_KEY, JSON.stringify(data)); }
+
+    function ensureAudio(){ if(!state.audioCtx){ const AC = window.AudioContext || window.webkitAudioContext; state.audioCtx = new AC(); } return state.audioCtx; }
+    function beep({freq=440, dur=120, type='sine', vol=0.2}={}){ if(!state.soundOn) return; const ctx = ensureAudio(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = vol; o.connect(g); g.connect(ctx.destination); const now = ctx.currentTime; g.gain.setValueAtTime(vol, now); g.gain.exponentialRampToValueAtTime(0.0001, now + dur/1000); o.start(now); o.stop(now + dur/1000); }
+    function correctSfx(){ beep({freq:880, dur:140, type:'triangle', vol:0.25}); }
+    function wrongSfx(){   beep({freq:160, dur:220, type:'sawtooth', vol:0.25}); }
+    function nextSfx(){    beep({freq:520, dur:90,  type:'square',  vol:0.15}); }
+    function timeoutSfx(){ beep({freq:300, dur:400, type:'sine',    vol:0.25}); }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function startQuiz(){
+      state.name = (playerNameIn.value||"").trim();
+      state.difficulty = difficultySel.value;
+      const cfg = DIFF_CONFIG[state.difficulty];
+      diffBadge.textContent = cfg.label;
+      scoreText.textContent = 0;
+
+      const bank = QUESTION_BANK[state.difficulty].slice();
+      const pool = shuffleChk.checked ? shuffle(bank) : bank;
+      state.questions = pool.slice(0, Math.min(MAX_QUESTIONS, pool.length));
+      state.index = 0; state.score = 0; state.correct = 0; state.timeLeft = cfg.perQuestionTime;
+
+      hide(startScreen); hide(resultScreen); show(quizScreen);
+      setProgress(0, state.questions.length);
+      renderQuestion();
+    }
+
+    function renderQuestion(){
+      clearTimer();
+      const cfg = DIFF_CONFIG[state.difficulty];
+      state.timeLeft = cfg.perQuestionTime;
+      timeText.textContent = state.timeLeft;
+      circleDash(cfg.perQuestionTime, cfg.perQuestionTime);
+
+      const current = state.questions[state.index];
+      qTitle.textContent = `Q${state.index+1}. ${current.q}`;
+      choices.innerHTML = "";
+      current.choices.forEach((c, i)=>{
+        const li = document.createElement('li');
+        li.tabIndex = 0; li.dataset.index = i;
+        li.innerHTML = `<span class="muted small">${i+1}.</span> ${escapeHtml(c)}`; // ensures <script>/<style> show as text
+        li.addEventListener('click', () => selectAnswer(i));
+        li.addEventListener('keydown', (e)=>{ if(e.key>='1'&&e.key<='4'){ selectAnswer(parseInt(e.key)-1);} });
+        choices.appendChild(li);
+      });
+      state.accepting = true;
+      nextBtn.disabled = true;
+
+      state.timerId = setInterval(()=>{
+        state.timeLeft -= 1;
+        timeText.textContent = state.timeLeft;
+        circleDash(cfg.perQuestionTime, state.timeLeft);
+        if(state.timeLeft <= 0){
+          clearTimer();
+          lockChoices();
+          nextBtn.disabled = false;
+          timeoutSfx();
+        }
+      }, 1000);
+    }
+
+    function clearTimer(){ if(state.timerId){ clearInterval(state.timerId); state.timerId=null; } }
+
+    function selectAnswer(i){
+      if(!state.accepting) return;
+      state.accepting = false;
+      clearTimer();
+      const current = state.questions[state.index];
+      const correct = current.answerIndex;
+      const items = $$('li', choices);
+      items.forEach((li, idx)=>{
+        if(idx===correct) li.classList.add('correct');
+        if(idx===i && i!==correct) li.classList.add('wrong');
+        li.style.pointerEvents='none';
+      });
+
+      if(i===correct){
+        state.correct += 1;
+        const points = DIFF_CONFIG[state.difficulty].points + Math.max(0, state.timeLeft);
+        state.score += points;
+        correctSfx();
+      } else {
+        wrongSfx();
+      }
+      scoreText.textContent = state.score;
+      nextBtn.disabled = false;
+    }
+
+    function lockChoices(){ $$('#choices li').forEach(li=> li.style.pointerEvents='none'); }
+
+    nextBtn.addEventListener('click', ()=>{ nextSfx(); state.index += 1; setProgress(state.index, state.questions.length); if(state.index >= state.questions.length){ endQuiz(); } else { renderQuestion(); } });
+
+    quitBtn.addEventListener('click', (e)=>{ e.preventDefault(); if(confirm('Quit the quiz? Your current progress will be lost.')) endQuiz(true); });
+
+    function endQuiz(aborted=false){
+      clearTimer(); hide(quizScreen); show(resultScreen);
+      finalScore.textContent = state.score;
+      finalCorrect.textContent = `${state.correct}/${state.questions.length}`;
+      finalTime.textContent = `${Math.max(0, state.timeLeft)}s`;
+      resultMeta.textContent = aborted ? 'Quiz aborted' : `${DIFF_CONFIG[state.difficulty].label} • ${state.questions.length} questions`;
+      saveName.value = state.name || '';
+    }
+
+    // Leaderboard
+    saveForm.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const name = (saveName.value||'Anonymous').trim().slice(0,20) || 'Anonymous';
+      const entry = { name, score: state.score, difficulty: state.difficulty, date: new Date().toISOString() };
+      const board = getBoard(); board.push(entry); board.sort((a,b)=> b.score - a.score || a.name.localeCompare(b.name));
+      setBoard(board.slice(0, BOARD_LIMIT)); alert('Saved to Leaderboard!');
+    });
+
+    function renderBoard(){
+      const board = getBoard();
+      boardBody.innerHTML = board.map((e, i)=>{
+        const d = new Date(e.date); const ds = d.toLocaleDateString(); const diff = DIFF_CONFIG[e.difficulty]?.label || e.difficulty;
+        return `<tr><td>${i+1}</td><td>${escapeHtml(e.name)}</td><td>${e.score}</td><td>${diff}</td><td>${ds}</td></tr>`;
+      }).join('') || `<tr><td colspan="5" class="muted">No scores yet. Play a game!</td></tr>`;
+    }
+
+    viewBoardBtn.addEventListener('click', ()=>{ renderBoard(); boardModal.showModal(); });
+    viewBoardBtn2?.addEventListener('click', ()=>{ renderBoard(); boardModal.showModal(); });
+    closeBoard.addEventListener('click', ()=> boardModal.close());
+
+    resetBoardBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      if(confirm('Clear all saved scores?')){ localStorage.removeItem(BOARD_KEY); renderBoard(); alert('Leaderboard cleared.'); }
+    });
+
+    howBtn.addEventListener('click', ()=> howModal.showModal());
+    closeHow.addEventListener('click', ()=> howModal.close());
+
+    soundToggle.addEventListener('change', ()=>{ state.soundOn = soundToggle.checked; if(state.soundOn) ensureAudio(); });
+
+    window.addEventListener('keydown', (e)=>{
+      if(quizScreen.classList.contains('hidden')) return;
+      if(e.key>='1' && e.key<='4'){ const idx = parseInt(e.key) - 1; selectAnswer(idx); }
+      else if(e.key.toLowerCase()==='n'){ if(!nextBtn.disabled) nextBtn.click(); }
+    });
+
+    function generateShareCard(){
+      const c = shareCanvas; const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0,0,c.width,c.height); g.addColorStop(0,'#1b1f3a'); g.addColorStop(1,'#3b2a55'); ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height);
+      ctx.globalAlpha = 0.25; ctx.fillStyle = '#7c8aff'; ctx.beginPath(); ctx.arc(150,100,80,0,Math.PI*2); ctx.fill(); ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.arc(900,420,120,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ecf0ff'; ctx.font = 'bold 48px Inter,Segoe UI,Arial'; ctx.fillText('QuizMaster — Result', 48, 80);
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; roundRect(ctx, 40, 110, 944, 300, 20, true, false);
+      ctx.fillStyle = '#9aa3b2'; ctx.font = '24px Inter,Segoe UI,Arial'; ctx.fillText('Player', 72, 170); ctx.fillText('Score', 72, 230); ctx.fillText('Correct', 72, 290); ctx.fillText('Difficulty', 72, 350);
+      ctx.fillStyle = '#ecf0ff'; ctx.font = 'bold 40px Inter,Segoe UI,Arial'; const name = (saveName.value || state.name || 'Anonymous'); ctx.fillText(name, 220, 170); ctx.fillText(String(state.score), 220, 230); ctx.fillText(`${state.correct}/${state.questions.length}`, 220, 290); ctx.fillText(DIFF_CONFIG[state.difficulty].label, 220, 350);
+      ctx.fillStyle = '#9aa3b2'; ctx.font = '22px Inter,Segoe UI,Arial'; ctx.fillText(new Date().toLocaleString(), 48, 480);
+      ctx.font = '72px \\Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji'; ctx.fillText('🏆', 900, 180);
+      const url = c.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = `QuizMaster-result-${Date.now()}.png`; a.click();
+    }
+    function roundRect(ctx, x, y, w, h, r, fill, stroke){ if(typeof r === 'number'){ r = {tl:r,tr:r,br:r,bl:r}; } ctx.beginPath(); ctx.moveTo(x+r.tl, y); ctx.lineTo(x+w-r.tr, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r.tr); ctx.lineTo(x+w, y+h-r.br); ctx.quadraticCurveTo(x+w, y+h, x+w-r.br, y+h); ctx.lineTo(x+r.bl, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r.bl); ctx.lineTo(x, y+r.tl); ctx.quadraticCurveTo(x, y, x+r.tl, y); ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke(); }
+
+    shareBtn.addEventListener('click', generateShareCard);
+
+    setupForm.addEventListener('submit', (e)=>{ e.preventDefault(); startQuiz(); ensureAudio(); });
+    playAgainBtn.addEventListener('click', ()=>{ hide(resultScreen); show(startScreen); });
+
+    circleDash(100, 100);
+  </script>
+</body>
+</html>
