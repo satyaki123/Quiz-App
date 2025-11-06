@@ -69,5 +69,5 @@ Perfect for sharing on social media!
 Contributions, issues, and feature requests are welcome!
 Feel free to fork the repo and submit a pull request.
 
-
+![image alt](https://github.com/satyaki123/Quiz-App/blob/218aec80996f7d069180b5980c30a4e74c65e726/Screenshot%20(30).png)
 
